@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreBookingRequest;
+use App\Jobs\SendCancellationNotification;
+use App\Models\Booking;
 use App\Models\Vehicle;
 use Illuminate\Http\JsonResponse;
 
@@ -34,5 +36,24 @@ class BookingController extends Controller
             'start_date' => $booking->start_date->format('Y-m-d'),
             'end_date' => $booking->end_date->format('Y-m-d'),
         ], 201);
+    }
+
+    public function destroy(Booking $booking): JsonResponse
+    {
+        // Cancelling twice is harmless: the second call returns the same
+        // response without re-sending the notification.
+        if ($booking->status !== 'cancelled') {
+            $booking->update([
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+            ]);
+
+            SendCancellationNotification::dispatch($booking);
+        }
+
+        return response()->json([
+            'booking_id' => $booking->id,
+            'status' => 'cancelled',
+        ]);
     }
 }

@@ -11,3 +11,4 @@ Route::get('/user', function (Request $request) {
 
 Route::get('/vehicles/availability', [VehicleController::class, 'availability']);
 Route::post('/bookings', [BookingController::class, 'store']);
+Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
