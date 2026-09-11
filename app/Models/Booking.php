@@ -2,13 +2,15 @@
 
 namespace App\Models;
 
+use Database\Factories\BookingFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Booking extends Model
 {
-    /** @use HasFactory<\Database\Factories\BookingFactory> */
+    /** @use HasFactory<BookingFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -32,5 +34,13 @@ class Booking extends Model
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(Vehicle::class);
+    }
+
+    /**
+     * Confirmed bookings that overlap the requested [$start, $end) range.
+     */
+    public function scopeOverlapping(Builder $query, string $start, string $end): Builder
+    {
+        throw new \RuntimeException('Booking::scopeOverlapping() not implemented');
     }
 }
