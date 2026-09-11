@@ -292,3 +292,14 @@ place of a real email or SMS.
 Database driver so the job runs outside the request and a failure is visible
 in `failed_jobs`; sync would hide it. A failing job retries three times ten
 seconds apart, then `failed()` logs the booking id and exception.
+
+## AI usage
+
+I worked through this the way I would have before AI, with a task list and
+one commit per task, and used Claude Code where I would previously have
+been Googling: checking current Laravel 13 syntax, talking through options
+before choosing one, and getting first drafts of files to work from. Each
+piece was then tested in tinker and with curl and thought through against
+the scope of work before it went in. The decisions in this README are mine.
+AI helped with the writing, and I put as much of my own thinking into the
+task as I could.
