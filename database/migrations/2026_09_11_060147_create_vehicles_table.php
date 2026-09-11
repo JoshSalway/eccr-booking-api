@@ -13,15 +13,16 @@ return new class extends Migration
     {
         Schema::create('vehicles', function (Blueprint $table) {
             $table->id();
+            $table->string('make');
+            $table->string('model');
+            $table->string('type');
+            $table->string('location');
+            $table->unsignedInteger('daily_rate');
+            $table->string('external_id')->nullable();
+            $table->string('source')->nullable();
             $table->timestamps();
-        });
-    }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::dropIfExists('vehicles');
+            $table->index(['type', 'location']);
+        });
     }
 };

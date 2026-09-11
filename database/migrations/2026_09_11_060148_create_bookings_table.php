@@ -13,15 +13,15 @@ return new class extends Migration
     {
         Schema::create('bookings', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('vehicle_id')->constrained()->restrictOnDelete();
+            $table->string('customer_name');
+            $table->date('start_date');
+            $table->date('end_date');
+            $table->string('status')->default('confirmed');
+            $table->timestamp('cancelled_at')->nullable();
             $table->timestamps();
-        });
-    }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::dropIfExists('bookings');
+            $table->index(['vehicle_id', 'status', 'start_date']);
+        });
     }
 };
