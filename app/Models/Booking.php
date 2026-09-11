@@ -37,13 +37,14 @@ class Booking extends Model
     }
 
     /**
-     * Confirmed bookings that overlap the requested [$start, $end) range.
+     * Confirmed bookings that overlap the requested range, inclusive of both ends.
+     * A vehicle returned on a date is not available again until the next day.
      */
     public function scopeOverlapping(Builder $query, string $start, string $end): Builder
     {
         return $query
             ->where('status', 'confirmed')
-            ->where('start_date', '<', $end)
-            ->where('end_date', '>', $start);
+            ->where('start_date', '<=', $end)
+            ->where('end_date', '>=', $start);
     }
 }
