@@ -10,5 +10,5 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 Route::get('/vehicles/availability', [VehicleController::class, 'availability']);
-Route::post('/bookings', [BookingController::class, 'store']);
-Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
+Route::post('/bookings', [BookingController::class, 'store'])->middleware('auth:sanctum');
+Route::delete('/bookings/{booking}', [BookingController::class, 'destroy'])->middleware('auth:sanctum');
