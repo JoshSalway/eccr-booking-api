@@ -25,7 +25,8 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-The API is then available at `http://localhost:8000`.
+The API is then available at `http://localhost:8000`. The seeder prints the
+API token at the end of `migrate --seed`; see Authentication below.
 
 To process queued jobs, run a worker in a second terminal:
 
@@ -40,6 +41,111 @@ php artisan queue:work
 | GET | `/api/vehicles/availability` | Public |
 | POST | `/api/bookings` | Sanctum token |
 | DELETE | `/api/bookings/{id}` | Sanctum token |
+
+## Authentication
+
+Booking creation and cancellation require a Sanctum bearer token. Availability
+is public, because a customer searches before they have signed in. There is no
+registration or login flow; the seeder creates one test user and one token.
+
+The token is the same on every fresh install so it can be copied from here:
+
+```
+Authorization: Bearer 1|nib1AjgQH55Gri1Ywd3YSn1JFiSFUWDW65XTnJAN
+```
+
+Sanctum stores only the SHA-256 hash of a token, so the seeder writes the hash
+of a fixed string rather than calling `createToken()`, which would generate a
+random one. In production tokens are random and shown once. Any valid token
+can cancel any booking, since bookings are not linked to a user; see Schema.
+
+## Trying it out
+
+Two terminals. In the first, set up and serve:
+
+```bash
+php artisan migrate:fresh --seed
+php artisan serve
+```
+
+The last line of the seed output is the token. In the second terminal, save
+the token and a booking body so you do not retype them:
+
+```bash
+T='1|nib1AjgQH55Gri1Ywd3YSn1JFiSFUWDW65XTnJAN'
+B='{"vehicle_id":1,"customer_name":"Ann","start_date":"2026-10-20","end_date":"2026-10-22"}'
+```
+
+Use dates from today onwards; past dates are rejected. Then run these in order.
+Add `-w '\n%{http_code}\n'` to any curl to see the status code. The codes you
+will see:
+
+| Code | Meaning | When |
+| --- | --- | --- |
+| 200 | OK | Availability list, cancellation |
+| 201 | Created | Booking made |
+| 401 | Unauthenticated | Missing or wrong token on a protected route |
+| 404 | Not found | Cancelling a booking id that does not exist |
+| 409 | Conflict | Vehicle already booked for those dates |
+| 422 | Unprocessable | Validation failed: bad date, unknown vehicle, missing field |
+
+**1. Availability is public.** No token needed. Returns all five vehicles with `200 OK`.
+
+```bash
+curl "http://localhost:8000/api/vehicles/availability?start_date=2026-10-20&end_date=2026-10-22"
+```
+
+**2. Booking without a token is refused.** `401 Unauthenticated`, before the controller runs.
+
+```bash
+curl -X POST http://localhost:8000/api/bookings \
+  -H 'Accept: application/json' -H 'Content-Type: application/json' -d "$B"
+# {"message":"Unauthenticated."}
+```
+
+**3. Booking with the token works.** `201 Created`, with the booking.
+
+```bash
+curl -X POST http://localhost:8000/api/bookings \
+  -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $T" -d "$B"
+# {"booking_id":1,"status":"confirmed","vehicle_id":1,"start_date":"2026-10-20","end_date":"2026-10-22"}
+```
+
+**4. The same dates again are refused.** `409 Conflict`, the vehicle is taken.
+Vehicle 1 also disappears from step 1 for those dates.
+
+```bash
+# repeat step 3
+# {"error":"vehicle_unavailable","message":"This vehicle is already booked for the requested dates"}
+```
+
+**5. Cancel it.** `200 OK`. Cancelling again returns the same body, still 200.
+
+```bash
+curl -X DELETE http://localhost:8000/api/bookings/1 \
+  -H 'Accept: application/json' -H "Authorization: Bearer $T"
+# {"booking_id":1,"status":"cancelled"}
+```
+
+**6. The dates are free again.** Repeat step 3 and it returns `201 Created`
+with a new `booking_id`.
+
+**7. Process the notification job.** The DELETE queued a job. Start a worker
+and watch it pick the job up, then check the log. The worker keeps running
+until you press Ctrl+C.
+
+```bash
+php artisan queue:work
+# App\Jobs\SendCancellationNotification ... DONE
+
+tail -1 storage/logs/laravel.log
+# local.INFO: Cancellation notification sent {"booking_id":1,"customer_name":"Ann","vehicle_id":1}
+```
+
+Send `Accept: application/json` on every request. Without it Laravel treats a
+401 as a browser request and tries to redirect to a login page that does not
+exist.
 
 ## Schema
 
@@ -125,10 +231,7 @@ dates in the brief are now in the past, so use current dates when testing.
 **No automated tests.** Everything was verified by hand in tinker and with
 `curl` against a running server: the seeder, every validation rule, the
 optional filters, the contract shape, and all seven overlap cases including
-the one `whereBetween` misses. That fits the 3 to 4 hour budget for this
-exercise. In real work I would write feature tests for each endpoint and the
-overlap boundary cases (adjacent, exact, enclosed, enclosing, cancelled) so
-the behaviour is proven on every change, not just once.
+the one `whereBetween` misses. 
 
 **No transaction or row lock on booking creation.** The controller checks
 for an overlap and then inserts, as two plain statements. Two requests for the
@@ -142,12 +245,6 @@ is told early that it is no longer available instead of failing at the last
 click. That needs a `pending` status with an expiry and a job to release
 stale holds. All of this rests on assumptions about traffic and checkout flow
 that the brief does not make, so I left it out rather than build on a guess.
-
-**One overlap query per vehicle.** The availability controller loads the
-matching vehicles and asks each one whether it has a clashing booking. For a
-fleet of five this is fine and keeps the overlap logic in one place. For a
-large fleet the same scope would move into the main query with
-`whereDoesntHave`.
 
 ## Overlap prevention
 
@@ -186,3 +283,12 @@ option is to store pickup and return times and let the depot decide the gap,
 but that is a business decision. I would clarify the exact requirements with
 Matt, Head of Software Engineering, and how turnaround actually works at the
 branches before changing the schema.
+
+## Queue and the cancellation job
+
+Cancelling dispatches `SendCancellationNotification`, which logs a line in
+place of a real email or SMS.
+
+Database driver so the job runs outside the request and a failure is visible
+in `failed_jobs`; sync would hide it. A failing job retries three times ten
+seconds apart, then `failed()` logs the booking id and exception.
