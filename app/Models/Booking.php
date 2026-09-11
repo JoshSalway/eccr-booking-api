@@ -41,6 +41,9 @@ class Booking extends Model
      */
     public function scopeOverlapping(Builder $query, string $start, string $end): Builder
     {
-        throw new \RuntimeException('Booking::scopeOverlapping() not implemented');
+        return $query
+            ->where('status', 'confirmed')
+            ->where('start_date', '<', $end)
+            ->where('end_date', '>', $start);
     }
 }
